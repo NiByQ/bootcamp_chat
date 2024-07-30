@@ -1,57 +1,72 @@
 <script lang="ts">
 import { ref } from 'vue';
-import { bootcamp_chat_backend } from '../../declarations/bootcamp_chat_backend';
+import { bootcamp_chat_backend, canisterId, createActor } from '../../declarations/bootcamp_chat_backend';
 import { AuthClient } from '@dfinity/auth-client';
 import { HttpAgent } from '@dfinity/agent';
 import type { Identity } from '@dfinity/agent';
+import { Principal } from '@dfinity/principal';
 
 export default {
   data() {
     return {
       newNote: "",
-      notes: [] as string[],
+      notes: [] as string[][],
       identity: undefined as undefined | Identity,
+      principalText: ""
     }
   },
   methods: {
-    async dodajNotatke(){
-      await bootcamp_chat_backend.add_note(this.newNote)
-      await this.pobierzNotatki
+    async dodajNotatke() {
+      if (!this.identity || this.identity.getPrincipal() === Principal.anonymous()) {
+        throw new Error("PLZ log in")
+      }
+      const backend = createActor(canisterId, {
+        agentOptions: {
+          identity: this.identity
+        }
+      });
+      await backend.add_note(this.newNote)
+      await this.pobierzNotatki()
     },
     async pobierzNotatki() {
-      this.notes = await bootcamp_chat_backend.get_notes()
+      if (!this.identity || this.identity.getPrincipal() === Principal.anonymous()) {
+        throw new Error("PLZ log in")
+      }
+      this.notes = await bootcamp_chat_backend.get_notes(this.identity.getPrincipal())
     },
-    async login(){
+    async login() {
       const authClient = await AuthClient.create();
       await authClient.login({
         identityProvider: "http://cuj6u-c4aaa-aaaaa-qaajq-cai.localhost:4943"
       })
+
       const identity = authClient.getIdentity();
-      console.log("Zalogowano ",identity.getPrincipal());
-      
+      this.principalText = identity.getPrincipal().toText()
+      console.log("Zalogowano", identity.getPrincipal())
       this.identity = identity;
-      //const agent = new HttpAgent{{ identity }};
+      await this.pobierzNotatki()
     }
   },
-
   mounted(){
     this.pobierzNotatki()
   }
 }
 </script>
 
-
 <template>
   <main>
     <img src="/logo2.svg" alt="DFINITY logo" />
     <br />
     <br />
-    {{ identity?.getPrincipal() }} <button @click="login">Login</button>
+    {{ principalText }} <button @click="login">login</button>
     <div>
-      {{ notes }}
+      <div v-for="note in notes[0]">
+
+      </div>
+      {{ notes[0] }}
     </div>
     <div>
-      <textarea name="" id="" v-model="newNote"></textarea><button @click="dodajNotatke">Dodaj notatkę</button>
+      <textarea v-model="newNote"></textarea><button @click="dodajNotatke">Dodaj notatke</button>
     </div>
   </main>
 </template>
